@@ -1,6 +1,6 @@
-# Firebase config with real credentials (keep this safe!)
-# Uncomment the line below if you want to keep your Firebase config private
-# js/firebase-config.js
+# Firebase config - Las credenciales de Firebase son públicas y seguras de exponer
+# Solo el archivo local se mantiene privado
+js/firebase-config.local.js
 
 # OS files
 .DS_Store

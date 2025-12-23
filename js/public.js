@@ -1,8 +1,9 @@
 import { firebaseConfig } from './firebase-config.js';
+import { sanitizeHTML, sanitizeURL, sanitizeAttribute, handleAsyncOperation, DataCache } from './utils.js';
 
 // Importar Firebase desde CDN
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-import { getFirestore, collection, getDocs, query, orderBy } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { getFirestore, collection, getDocs, query, orderBy, where } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 // Inicializar Firebase
 const app = initializeApp(firebaseConfig);
@@ -14,6 +15,9 @@ let leagues = [];
 let players = [];
 let rounds = [];
 let roundResults = [];
+
+// Caché para estadísticas (mejora de performance)
+const statsCache = new DataCache();
 
 // Estado actual de navegación
 let currentView = 'leagues';
@@ -84,75 +88,115 @@ function setupBackButton() {
     }
 }
 
-// Cargar datos desde Firebase
+// Cargar datos desde Firebase (optimizado)
 async function loadData() {
     try {
-        // Cargar ubicaciones
-        const locationsSnapshot = await getDocs(collection(db, 'locations'));
-        locations = locationsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Cargar ubicaciones y ligas (siempre necesarios)
+        const [locationsSnapshot, leaguesSnapshot] = await Promise.all([
+            getDocs(collection(db, 'locations')),
+            getDocs(collection(db, 'leagues'))
+        ]);
 
-        // Cargar ligas
-        const leaguesSnapshot = await getDocs(collection(db, 'leagues'));
+        locations = locationsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         leagues = leaguesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // Cargar jugadores
-        const playersSnapshot = await getDocs(collection(db, 'players'));
-        players = playersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Obtener IDs de ligas activas y recientes (en curso, finalizadas hace menos de 6 meses)
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        const cutoffDate = sixMonthsAgo.toISOString().split('T')[0];
 
-        // Cargar fechas
-        const roundsSnapshot = await getDocs(collection(db, 'rounds'));
-        rounds = roundsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const activeLeagues = leagues.filter(l =>
+            l.status === 'en_curso' ||
+            l.status === 'programada' ||
+            (l.status === 'finalizada' && l.startDate >= cutoffDate)
+        );
 
-        // Cargar resultados
-        const resultsSnapshot = await getDocs(collection(db, 'round_results'));
-        roundResults = resultsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Si no hay ligas activas, cargar todas
+        const leagueIds = activeLeagues.length > 0
+            ? activeLeagues.map(l => l.id)
+            : leagues.map(l => l.id);
 
-        console.log('Datos cargados:', { locations, leagues, players, rounds, roundResults });
+        // Cargar solo rounds y results de ligas relevantes
+        // Firebase limita a 10 items en 'in', así que si hay más, cargamos todo
+        if (leagueIds.length > 0 && leagueIds.length <= 10) {
+            const [roundsSnapshot, resultsSnapshot] = await Promise.all([
+                getDocs(query(collection(db, 'rounds'), where('leagueId', 'in', leagueIds))),
+                getDocs(query(collection(db, 'round_results'), where('leagueId', 'in', leagueIds)))
+            ]);
+
+            rounds = roundsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            roundResults = resultsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        } else {
+            // Fallback: cargar todo si hay muchas ligas o ninguna
+            const [roundsSnapshot, resultsSnapshot] = await Promise.all([
+                getDocs(collection(db, 'rounds')),
+                getDocs(collection(db, 'round_results'))
+            ]);
+
+            rounds = roundsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            roundResults = resultsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        }
+
+        // Cargar solo jugadores que tienen resultados (bajo demanda)
+        // Extraer IDs únicos de jugadores de los resultados
+        const playerIds = [...new Set(roundResults.map(r => r.playerId))];
+        players = []; // Los cargaremos bajo demanda si es necesario
+
+        console.log('Datos cargados:', {
+            locations: locations.length,
+            leagues: leagues.length,
+            rounds: rounds.length,
+            roundResults: roundResults.length
+        });
     } catch (error) {
         console.error('Error al cargar datos:', error);
+        alert('Error al cargar los datos. Por favor recarga la página.');
     }
 }
 
-// Calcular estadísticas acumuladas de jugadores por liga
+// Calcular estadísticas acumuladas de jugadores por liga (con caché)
 function calculatePlayerStats(leagueId) {
-    const stats = {};
+    // Verificar caché primero
+    return statsCache.getOrCompute(`league_${leagueId}`, () => {
+        const stats = {};
 
-    // Filtrar resultados por liga
-    const leagueResults = roundResults.filter(r => r.leagueId === leagueId);
+        // Filtrar resultados por liga
+        const leagueResults = roundResults.filter(r => r.leagueId === leagueId);
 
-    // Inicializar stats
-    leagueResults.forEach(result => {
-        if (!stats[result.playerId]) {
-            stats[result.playerId] = {
-                name: result.playerName,
-                totalPoints: 0,
-                roundsPlayed: 0,
-                omwSum: 0,
-                oomwSum: 0,
-                avgOmw: 0,
-                avgOomw: 0
-            };
-        }
+        // Inicializar stats
+        leagueResults.forEach(result => {
+            if (!stats[result.playerId]) {
+                stats[result.playerId] = {
+                    name: result.playerName,
+                    totalPoints: 0,
+                    roundsPlayed: 0,
+                    omwSum: 0,
+                    oomwSum: 0,
+                    avgOmw: 0,
+                    avgOomw: 0
+                };
+            }
+        });
+
+        // Acumular datos
+        leagueResults.forEach(result => {
+            const playerStats = stats[result.playerId];
+            playerStats.totalPoints += result.points;
+            playerStats.roundsPlayed++;
+            playerStats.omwSum += result.omw;
+            playerStats.oomwSum += result.oomw;
+        });
+
+        // Calcular promedios
+        Object.values(stats).forEach(playerStats => {
+            if (playerStats.roundsPlayed > 0) {
+                playerStats.avgOmw = playerStats.omwSum / playerStats.roundsPlayed;
+                playerStats.avgOomw = playerStats.oomwSum / playerStats.roundsPlayed;
+            }
+        });
+
+        return stats;
     });
-
-    // Acumular datos
-    leagueResults.forEach(result => {
-        const playerStats = stats[result.playerId];
-        playerStats.totalPoints += result.points;
-        playerStats.roundsPlayed++;
-        playerStats.omwSum += result.omw;
-        playerStats.oomwSum += result.oomw;
-    });
-
-    // Calcular promedios
-    Object.values(stats).forEach(playerStats => {
-        if (playerStats.roundsPlayed > 0) {
-            playerStats.avgOmw = playerStats.omwSum / playerStats.roundsPlayed;
-            playerStats.avgOomw = playerStats.oomwSum / playerStats.roundsPlayed;
-        }
-    });
-
-    return stats;
 }
 
 // Renderizar ligas por estado
@@ -182,13 +226,15 @@ function renderLeagueCards(leaguesList) {
         const totalPlayers = new Set(roundResults.filter(r => r.leagueId === league.id).map(r => r.playerId)).size;
         const totalRounds = leagueRounds.length;
 
-        // Obtener información de ubicación
-        const location = locations.find(l => l.id === league.locationId);
+        // Sanitizar datos para prevenir XSS
+        const safeName = sanitizeHTML(league.name);
+        const safeLocationName = sanitizeHTML(league.locationName);
+        const safeLeagueId = sanitizeAttribute(league.id);
 
         return `
-            <div class="league-card" onclick="window.showLeagueDetail('${league.id}')">
-                <div class="league-card-title">${league.name}</div>
-                <div class="league-card-info">📍 ${league.locationName}</div>
+            <div class="league-card" onclick="window.showLeagueDetail('${safeLeagueId}')">
+                <div class="league-card-title">${safeName}</div>
+                <div class="league-card-info">📍 ${safeLocationName}</div>
                 <div class="league-card-info">📅 Inicio: ${formatDate(league.startDate)}</div>
 
                 <div class="league-card-stats">
@@ -231,15 +277,19 @@ function showLeagueDetail(leagueId) {
         finalizada: 'Finalizada'
     };
 
-    let locationTitle = league.locationName;
+    // Sanitizar datos
+    const safeName = sanitizeHTML(league.locationName);
+    let locationTitle = safeName;
+
     if (location && location.url) {
-        locationTitle = `<a href="${location.url}" target="_blank" style="color: var(--primary-color);">${league.locationName}</a>`;
+        const safeUrl = sanitizeURL(location.url);
+        locationTitle = `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--primary-color);">${safeName}</a>`;
     }
 
     document.getElementById('league-detail-header').innerHTML = `
         <div class="location-section" style="margin-bottom: 0;">
             <h2 class="location-title">Liga ${locationTitle} ${statusEmojis[league.status]}</h2>
-            <p class="league-subtitle">${league.name} - Inicio: ${formatDate(league.startDate)} - ${statusLabels[league.status]}</p>
+            <p class="league-subtitle">${sanitizeHTML(league.name)} - Inicio: ${formatDate(league.startDate)} - ${statusLabels[league.status]}</p>
         </div>
     `;
 
@@ -290,7 +340,7 @@ function renderLeagueStandings(leagueId) {
                 ${standingsArray.length > 0 ? standingsArray.map((player, index) => `
                     <tr>
                         <td>${index + 1}</td>
-                        <td>${player.name}</td>
+                        <td>${sanitizeHTML(player.name)}</td>
                         <td><strong>${player.totalPoints}</strong></td>
                         <td>${player.roundsPlayed}</td>
                         <td>${player.avgOmw.toFixed(1)}%</td>
@@ -317,7 +367,7 @@ function renderLeagueResults(leagueId) {
     sortedRounds.forEach((round, index) => {
         const roundNumber = index + 1;
         html += `
-            <button class="round-button" onclick="window.showRoundResults('${round.id}')">
+            <button class="round-button" onclick="window.showRoundResults('${sanitizeAttribute(round.id)}')">
                 Fecha ${roundNumber}<br>
                 <span class="round-date">${formatDate(round.date)}</span>
             </button>
@@ -359,8 +409,8 @@ function renderLeaguePlayers(leagueId) {
 
     playersWithStats.forEach(([playerId, playerInfo]) => {
         html += `
-            <button class="player-button" data-player-name="${playerInfo.name.toLowerCase()}" onclick="window.showPlayerStatsInLeague('${playerId}', '${leagueId}')">
-                ${playerInfo.name}
+            <button class="player-button" data-player-name="${sanitizeAttribute(playerInfo.name.toLowerCase())}" onclick="window.showPlayerStatsInLeague('${sanitizeAttribute(playerId)}', '${sanitizeAttribute(leagueId)}')">
+                ${sanitizeHTML(playerInfo.name)}
             </button>
         `;
     });
@@ -405,8 +455,8 @@ function showPlayerStatsInLeague(playerId, leagueId) {
 
     let html = `
         <div class="player-stats-card">
-            <h3>${playerName}</h3>
-            <h4>${league.name} - ${league.locationName}</h4>
+            <h3>${sanitizeHTML(playerName)}</h3>
+            <h4>${sanitizeHTML(league.name)} - ${sanitizeHTML(league.locationName)}</h4>
             <div class="stats-grid">
                 <div class="stat-item">
                     <span class="stat-item-label">Puntos Totales</span>
@@ -520,8 +570,8 @@ function populateGlobalPlayerSearch() {
             let html = '<div class="players-grid">';
             filteredPlayers.forEach(([playerId, playerInfo]) => {
                 html += `
-                    <button class="player-button" onclick="window.showGlobalPlayerStats('${playerId}')">
-                        ${playerInfo.name}
+                    <button class="player-button" onclick="window.showGlobalPlayerStats('${sanitizeAttribute(playerId)}')">
+                        ${sanitizeHTML(playerInfo.name)}
                     </button>
                 `;
             });
@@ -558,7 +608,7 @@ function showGlobalPlayerStats(playerId) {
 
     let html = `
         <div class="player-stats-card">
-            <h3>${playerName}</h3>
+            <h3>${sanitizeHTML(playerName)}</h3>
             <h4>Estadísticas Globales</h4>
             <div class="stats-grid">
                 <div class="stat-item">
@@ -600,7 +650,7 @@ function showGlobalPlayerStats(playerId) {
 
         html += `
             <div class="player-stats-card">
-                <h4>${league.name} - ${league.locationName}</h4>
+                <h4>${sanitizeHTML(league.name)} - ${sanitizeHTML(league.locationName)}</h4>
                 <div class="stats-grid">
                     <div class="stat-item">
                         <span class="stat-item-label">Puntos Totales</span>
@@ -650,7 +700,7 @@ function showRoundResults(roundId) {
 
     const displayDiv = document.getElementById('round-results-display');
     displayDiv.innerHTML = `
-        <h3>${league.name} - ${league.locationName} - Fecha ${roundNumber}</h3>
+        <h3>${sanitizeHTML(league.name)} - ${sanitizeHTML(league.locationName)} - Fecha ${roundNumber}</h3>
         <p class="round-subtitle">${formatDate(round.date)}</p>
         <table class="standings-table">
             <thead>
@@ -666,7 +716,7 @@ function showRoundResults(roundId) {
                 ${sortedResults.map(result => `
                     <tr>
                         <td>${result.ranking}</td>
-                        <td>${result.playerName}</td>
+                        <td>${sanitizeHTML(result.playerName)}</td>
                         <td><strong>${result.points}</strong></td>
                         <td>${result.omw.toFixed(1)}%</td>
                         <td>${result.oomw.toFixed(1)}%</td>
