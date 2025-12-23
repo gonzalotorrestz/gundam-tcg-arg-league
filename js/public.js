@@ -42,11 +42,21 @@ function setupTabs() {
         button.addEventListener('click', () => {
             const targetTab = button.getAttribute('data-tab');
 
+            // Remover clases active
             tabButtons.forEach(btn => btn.classList.remove('active'));
-            tabContents.forEach(content => content.classList.remove('active'));
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+                // IMPORTANTE: Resetear style.display para evitar conflictos
+                // con showLeagueDetail() que usa style.display directamente
+                content.style.display = '';
+            });
 
+            // Activar tab seleccionado
             button.classList.add('active');
             document.getElementById(targetTab).classList.add('active');
+
+            // Ocultar league-detail si está visible
+            document.getElementById('league-detail').style.display = 'none';
 
             currentView = targetTab;
         });
@@ -76,14 +86,25 @@ function setupBackButton() {
     const backButton = document.getElementById('back-to-leagues');
     if (backButton) {
         backButton.addEventListener('click', () => {
+            // Ocultar league-detail
             document.getElementById('league-detail').style.display = 'none';
-            document.getElementById('leagues').style.display = 'block';
+
+            // Resetear todos los tabs y mostrar solo leagues
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+                content.style.display = '';
+            });
+
+            document.getElementById('leagues').classList.add('active');
             currentLeagueId = null;
 
             // Reactivar el tab de ligas
             const tabButtons = document.querySelectorAll('.tab-button[data-tab]');
             tabButtons.forEach(btn => btn.classList.remove('active'));
             document.querySelector('.tab-button[data-tab="leagues"]').classList.add('active');
+
+            currentView = 'leagues';
         });
     }
 }
