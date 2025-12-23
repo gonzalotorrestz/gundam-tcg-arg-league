@@ -760,7 +760,8 @@ textarea {
     margin-bottom: 15px;
 }
 
-#player-search {
+/* Campos de búsqueda de jugadores (global y dentro de ligas) */
+.player-search-input {
     width: 100%;
     max-width: 500px;
     padding: 12px;
@@ -770,7 +771,7 @@ textarea {
     transition: all 0.3s;
 }
 
-#player-search:focus {
+.player-search-input:focus {
     outline: none;
     border-color: var(--primary-color);
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);

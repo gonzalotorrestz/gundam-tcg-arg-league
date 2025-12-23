@@ -423,7 +423,8 @@ function renderLeaguePlayers(leagueId) {
     let html = `
         <div class="player-search-section">
             <h2>Buscar Jugador en esta Liga</h2>
-            <input type="text" id="league-player-search" placeholder="Busca por nombre de jugador..." />
+            <p class="info-text">Estadísticas de jugadores en esta liga</p>
+            <input type="text" id="league-player-search" class="player-search-input" placeholder="Busca por nombre de jugador..." />
         </div>
         <div class="players-grid" id="league-players-grid">
     `;
