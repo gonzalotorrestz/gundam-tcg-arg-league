@@ -1,4 +1,5 @@
 import { firebaseConfig } from './firebase-config.js';
+import { sanitizeHTML, sanitizeURL, sanitizeAttribute, handleAsyncOperation, showError, showSuccess } from './utils.js';
 
 // Importar Firebase desde CDN
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
@@ -455,7 +456,7 @@ function renderLeaguesList() {
         };
 
         const statusOptions = `
-            <select onchange="window.changeLeagueStatus('${league.id}', this.value)" class="btn-small" style="padding: 4px 8px; font-size: 0.85rem;">
+            <select onchange="window.changeLeagueStatus('${sanitizeAttribute(league.id)}', this.value)" class="btn-small" style="padding: 4px 8px; font-size: 0.85rem;">
                 <option value="programada" ${league.status === 'programada' ? 'selected' : ''}>🟡 Programada</option>
                 <option value="en_curso" ${league.status === 'en_curso' ? 'selected' : ''}>🟢 En Curso</option>
                 <option value="pausada" ${league.status === 'pausada' ? 'selected' : ''}>⏸️ Pausada</option>
@@ -466,15 +467,15 @@ function renderLeaguesList() {
         return `
             <div class="list-item">
                 <div>
-                    <strong>${league.name}</strong> - ${league.locationName}
+                    <strong>${sanitizeHTML(league.name)}</strong> - ${sanitizeHTML(league.locationName)}
                     <br><span class="info-text">📅 Inicio: ${formatDate(league.startDate)}</span>
                     <br><span class="info-text">Estado: ${statusLabels[league.status]}</span>
                     ${hasRounds ? `<br><span class="info-text">${roundCount} fecha(s) registrada(s)</span>` : ''}
                 </div>
                 <div style="display: flex; gap: 10px; align-items: center;">
                     ${statusOptions}
-                    <button onclick="window.editLeague('${league.id}')" class="btn btn-secondary btn-small">✏️ Editar</button>
-                    <button onclick="window.deleteLeague('${league.id}')" class="btn btn-danger btn-small">🗑️ Eliminar</button>
+                    <button onclick="window.editLeague('${sanitizeAttribute(league.id)}')" class="btn btn-secondary btn-small">✏️ Editar</button>
+                    <button onclick="window.deleteLeague('${sanitizeAttribute(league.id)}')" class="btn btn-danger btn-small">🗑️ Eliminar</button>
                 </div>
             </div>
         `;
@@ -567,12 +568,13 @@ function renderLocationsList() {
         const hasRounds = rounds.some(r => r.locationId === location.id);
         const roundCount = rounds.filter(r => r.locationId === location.id).length;
 
-        let locationInfo = `<strong>${location.name}</strong>`;
+        let locationInfo = `<strong>${sanitizeHTML(location.name)}</strong>`;
         if (location.address) {
-            locationInfo += `<br><span class="info-text">📍 ${location.address}</span>`;
+            locationInfo += `<br><span class="info-text">📍 ${sanitizeHTML(location.address)}</span>`;
         }
         if (location.url) {
-            locationInfo += `<br><a href="${location.url}" target="_blank" class="admin-link">🔗 ${location.url}</a>`;
+            const safeUrl = sanitizeURL(location.url);
+            locationInfo += `<br><a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="admin-link">🔗 ${sanitizeHTML(location.url)}</a>`;
         }
         if (hasRounds) {
             locationInfo += `<br><span class="info-text">${roundCount} fecha(s) registrada(s)</span>`;
@@ -581,7 +583,7 @@ function renderLocationsList() {
         return `
             <div class="list-item">
                 <div>${locationInfo}</div>
-                ${!hasRounds ? `<button class="btn btn-danger btn-small" onclick="window.deleteLocation('${location.id}')">Eliminar</button>` : '<span class="info-text">(Con fechas)</span>'}
+                ${!hasRounds ? `<button class="btn btn-danger btn-small" onclick="window.deleteLocation('${sanitizeAttribute(location.id)}')">Eliminar</button>` : '<span class="info-text">(Con fechas)</span>'}
             </div>
         `;
     }).join('');
@@ -704,8 +706,8 @@ function previewImport() {
 
         let html = `
             <div class="success-message">
-                <strong>Liga:</strong> ${league.name}<br>
-                <strong>Ubicación:</strong> ${league.locationName}<br>
+                <strong>Liga:</strong> ${sanitizeHTML(league.name)}<br>
+                <strong>Ubicación:</strong> ${sanitizeHTML(league.locationName)}<br>
                 <strong>Fecha del torneo:</strong> ${formatDate(roundDate)}<br>
                 <strong>Número de fecha (cronológico):</strong> Fecha ${calculatedNumber}<br>
                 <strong>Jugadores encontrados:</strong> ${parsedResults.length}
@@ -727,7 +729,7 @@ function previewImport() {
             html += `
                 <tr>
                     <td>${result.ranking}</td>
-                    <td>${result.playerName}${result.memberNumber ? '<br><small style="color: #64748b;">MN: ' + result.memberNumber + '</small>' : ''}</td>
+                    <td>${sanitizeHTML(result.playerName)}${result.memberNumber ? '<br><small style="color: #64748b;">MN: ' + sanitizeHTML(result.memberNumber) + '</small>' : ''}</td>
                     <td>${result.points}</td>
                     <td>${result.omw}%</td>
                     <td>${result.oomw}%</td>
@@ -1132,8 +1134,8 @@ function renderLeagueRoundsList(leagueId) {
                     <span class="info-text">${results.length} resultado(s)</span>
                 </div>
                 <div style="display: flex; gap: 10px;">
-                    <button class="btn btn-secondary btn-small" onclick="window.editRoundDate('${round.id}')">✏️ Editar Fecha</button>
-                    <button class="btn btn-danger btn-small" onclick="window.deleteRoundFromLeague('${round.id}', '${leagueId}')">🗑️ Eliminar</button>
+                    <button class="btn btn-secondary btn-small" onclick="window.editRoundDate('${sanitizeAttribute(round.id)}')">✏️ Editar Fecha</button>
+                    <button class="btn btn-danger btn-small" onclick="window.deleteRoundFromLeague('${sanitizeAttribute(round.id)}', '${sanitizeAttribute(leagueId)}')">🗑️ Eliminar</button>
                 </div>
             </div>
         `;

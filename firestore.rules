@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Función para verificar si el usuario es admin
+    function isAdmin() {
+      return request.auth != null &&
+             exists(/databases/$(database)/documents/admins/$(request.auth.token.email));
+    }
+
+    // Colección de administradores - solo lectura para usuarios autenticados
+    match /admins/{email} {
+      allow read: if request.auth != null;
+      allow write: if false; // Solo se puede modificar manualmente desde Firebase Console
+    }
+
+    // Ubicaciones - lectura pública, escritura solo admin
+    match /locations/{locationId} {
+      allow read: if true; // Información pública de tiendas
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Ligas - lectura pública, escritura solo admin
+    match /leagues/{leagueId} {
+      allow read: if true; // Información pública de ligas y torneos
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Fechas de torneos - lectura pública, escritura solo admin
+    match /rounds/{roundId} {
+      allow read: if true; // Fechas públicas de torneos
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Jugadores - lectura pública, escritura solo admin
+    match /players/{playerId} {
+      allow read: if true; // Nombres para mostrar en resultados
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Resultados de fechas - lectura pública, escritura solo admin
+    match /round_results/{resultId} {
+      allow read: if true; // Resultados públicos de torneos
+      allow create, update, delete: if isAdmin();
+    }
+
+    // IMPORTANTE: No usar match /{document=**} genérico
+    // Cualquier otra colección será bloqueada por defecto
+  }
+}
