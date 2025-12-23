@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gundam TCG Argentina - Liga No Oficial - Tabla de Posiciones</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎴 Gundam TCG Argentina - Liga No Oficial</h1>
+            <p class="subtitle">Torneos por Ubicación - Temporada 2025</p>
+            <a href="admin/login.html" class="admin-link">Administración</a>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-button active" data-tab="leagues">Ligas</button>
+            <button class="tab-button" data-tab="global-stats">Estadísticas Globales</button>
+        </nav>
+
+        <!-- Ligas -->
+        <div id="leagues" class="tab-content active">
+            <div id="leagues-in-progress" class="leagues-section">
+                <h2>🟢 Ligas en Curso</h2>
+                <div id="in-progress-list" class="leagues-grid">
+                    <div class="loading">Cargando datos...</div>
+                </div>
+            </div>
+
+            <div id="leagues-finished" class="leagues-section">
+                <h2>🔴 Ligas Anteriores</h2>
+                <div id="finished-list" class="leagues-grid">
+                    <div class="loading">Cargando datos...</div>
+                </div>
+            </div>
+
+            <div id="leagues-upcoming" class="leagues-section">
+                <h2>🟡 Próximas Ligas</h2>
+                <div id="upcoming-list" class="leagues-grid">
+                    <div class="loading">Cargando datos...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estadísticas Globales -->
+        <div id="global-stats" class="tab-content">
+            <div class="player-search-section">
+                <h2>Estadísticas de Jugadores</h2>
+                <p class="info-text">Estadísticas acumuladas de todas las ligas</p>
+                <input type="text" id="player-search" placeholder="Busca por nombre de jugador..." />
+            </div>
+            <div id="player-stats">
+                <p class="placeholder">Busca un jugador para ver sus estadísticas globales</p>
+            </div>
+        </div>
+
+        <!-- Vista de detalle de liga (oculta por defecto) -->
+        <div id="league-detail" class="tab-content" style="display: none;">
+            <button id="back-to-leagues" class="btn btn-secondary" style="margin-bottom: 20px;">← Volver a Ligas</button>
+            <div id="league-detail-header"></div>
+
+            <nav class="tabs" style="margin-top: 20px;">
+                <button class="tab-button active" data-subtab="league-standings">Tabla de Posiciones</button>
+                <button class="tab-button" data-subtab="league-results">Resultados por Fecha</button>
+                <button class="tab-button" data-subtab="league-players">Estadísticas de Jugadores</button>
+            </nav>
+
+            <div id="league-standings" class="subtab-content active">
+                <div id="league-standings-content"></div>
+            </div>
+
+            <div id="league-results" class="subtab-content">
+                <div id="league-results-content"></div>
+            </div>
+
+            <div id="league-players" class="subtab-content">
+                <div id="league-players-content"></div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Gundam TCG Argentina - Liga No Oficial © 2025</p>
+        </footer>
+    </div>
+
+    <script type="module" src="js/public.js"></script>
+</body>
+</html>

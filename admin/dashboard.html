@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Administración - Gundam TCG Argentina - Liga No Oficial</title>
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚙️ Panel de Administración</h1>
+            <div class="header-actions">
+                <a href="../index.html" class="btn btn-secondary">← Volver al Inicio</a>
+                <button id="reload-data-btn" class="btn btn-secondary" title="Recargar datos desde Firebase">🔄 Recargar</button>
+                <span id="user-email" class="user-email"></span>
+                <button id="logout-btn" class="btn btn-secondary">Cerrar Sesión</button>
+            </div>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-button active" data-tab="manage-leagues">Gestionar Ligas</button>
+            <button class="tab-button" data-tab="import-results">Importar Resultados</button>
+            <button class="tab-button" data-tab="manage-locations">Gestionar Ubicaciones</button>
+        </nav>
+
+        <!-- Gestionar Ligas -->
+        <div id="manage-leagues" class="tab-content active">
+            <h2>Gestionar Ligas</h2>
+
+            <form id="league-form" class="form-section">
+                <h3>Crear Nueva Liga</h3>
+                <div class="form-group">
+                    <label for="league-name">Nombre de la Liga:</label>
+                    <input type="text" id="league-name" placeholder="Ej: Temporada 1, Liga Verano 2025" required>
+                </div>
+                <div class="form-group">
+                    <label for="league-location">Ubicación:</label>
+                    <select id="league-location" required>
+                        <option value="">-- Selecciona la ubicación --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="league-start-date">Fecha de Inicio:</label>
+                    <input type="date" id="league-start-date" required>
+                </div>
+                <div class="form-group">
+                    <label for="league-status">Estado:</label>
+                    <select id="league-status" required>
+                        <option value="programada">Programada</option>
+                        <option value="en_curso">En Curso</option>
+                        <option value="pausada">Pausada</option>
+                        <option value="finalizada">Finalizada</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Crear Liga</button>
+            </form>
+
+            <h3>Ligas Registradas</h3>
+            <div id="leagues-list"></div>
+        </div>
+
+        <!-- Editar Liga -->
+        <div id="edit-league" class="tab-content" style="display: none;">
+            <button id="back-to-leagues-btn" class="btn btn-secondary" style="margin-bottom: 20px;">← Volver a Ligas</button>
+
+            <h2>Editar Liga</h2>
+            <form id="edit-league-form" class="form-section">
+                <input type="hidden" id="edit-league-id">
+                <div class="form-group">
+                    <label for="edit-league-name">Nombre de la Liga:</label>
+                    <input type="text" id="edit-league-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-league-location">Ubicación:</label>
+                    <select id="edit-league-location" required>
+                        <option value="">-- Selecciona la ubicación --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="edit-league-start-date">Fecha de Inicio:</label>
+                    <input type="date" id="edit-league-start-date" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-league-status">Estado:</label>
+                    <select id="edit-league-status" required>
+                        <option value="programada">Programada</option>
+                        <option value="en_curso">En Curso</option>
+                        <option value="pausada">Pausada</option>
+                        <option value="finalizada">Finalizada</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+            </form>
+
+            <div class="form-section">
+                <h3>Gestionar Fechas de esta Liga</h3>
+                <div id="league-rounds-list"></div>
+            </div>
+        </div>
+
+        <!-- Importar Resultados -->
+        <div id="import-results" class="tab-content">
+            <h2>Importar Resultados de Fecha</h2>
+
+            <div class="form-section">
+                <h3>1. Seleccionar Liga y Fecha del Torneo</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="league-select">Liga:</label>
+                        <select id="league-select" required>
+                            <option value="">-- Selecciona la liga --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="round-date">Fecha del Torneo:</label>
+                        <input type="date" id="round-date" required>
+                    </div>
+                </div>
+                <div id="round-info" style="display: none;">
+                    <p class="info-text">
+                        <strong>Fecha a crear:</strong> <span id="next-round-display"></span>
+                    </p>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h3>2. Pegar Tabla de Resultados</h3>
+                <p class="info-text">Copia la tabla completa de resultados del torneo y pégala aquí (Ctrl+Shift+V en Konsole)</p>
+                <textarea id="results-textarea" rows="15" placeholder="Pega aquí la tabla con:&#10;Ranking, User Name, Member Number, Win Points, OMW%, OOMW%&#10;&#10;Ejemplo:&#10;1&#10;fhAvalon [VX]&#10;Member Number 0000565634&#10;12&#10;62.5%&#10;60.9%&#10;2&#10;Charly Aznable&#10;..."></textarea>
+
+                <button type="button" id="preview-import-btn" class="btn btn-primary">Previsualizar Datos</button>
+            </div>
+
+            <div id="preview-section" style="display: none;">
+                <h3>3. Confirmar Importación</h3>
+                <div id="preview-content"></div>
+                <div style="margin-top: 20px;">
+                    <button type="button" id="import-results-btn" class="btn btn-primary">Confirmar e Importar</button>
+                    <button type="button" id="cancel-preview-btn" class="btn btn-secondary">Cancelar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gestionar Ubicaciones -->
+        <div id="manage-locations" class="tab-content">
+            <h2>Gestionar Ubicaciones</h2>
+
+            <form id="location-form">
+                <div class="form-group">
+                    <label for="location-name">Nombre de la Tienda:</label>
+                    <input type="text" id="location-name" placeholder="Ej: Tienda Central, Sucursal Norte" required>
+                </div>
+                <div class="form-group">
+                    <label for="location-address">Dirección:</label>
+                    <input type="text" id="location-address" placeholder="Ej: Av. Principal 123, Ciudad">
+                </div>
+                <div class="form-group">
+                    <label for="location-url">URL (opcional):</label>
+                    <input type="url" id="location-url" placeholder="https://ejemplo.com">
+                </div>
+                <button type="submit" class="btn btn-primary">Agregar Ubicación</button>
+            </form>
+
+            <h3>Ubicaciones Registradas</h3>
+            <div id="locations-list"></div>
+        </div>
+    </div>
+
+    <script type="module" src="../js/admin.js"></script>
+</body>
+</html>
