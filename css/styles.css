@@ -51,6 +51,19 @@ header h1 {
     color: var(--primary-color);
 }
 
+.header-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.header-logo {
+    height: 5.5rem;
+    width: auto;
+}
+
 .subtitle {
     color: var(--text-secondary);
     font-size: 1.1rem;

@@ -1,5 +1,7 @@
 import { firebaseConfig } from './firebase-config.js';
 import { sanitizeHTML, sanitizeURL, sanitizeAttribute, handleAsyncOperation, DataCache } from './utils.js';
+import { notifications } from './notifications.js';
+import { loading } from './loading.js';
 
 // Importar Firebase desde CDN
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
@@ -111,6 +113,7 @@ function setupBackButton() {
 
 // Cargar datos desde Firebase (optimizado)
 async function loadData() {
+    const loadingId = loading.show('Cargando ligas...');
     try {
         // Cargar ubicaciones y ligas (siempre necesarios)
         const [locationsSnapshot, leaguesSnapshot] = await Promise.all([
@@ -171,7 +174,9 @@ async function loadData() {
         });
     } catch (error) {
         console.error('Error al cargar datos:', error);
-        alert('Error al cargar los datos. Por favor recarga la página.');
+        notifications.error('Error al cargar los datos. Por favor recarga la página.');
+    } finally {
+        loading.hide(loadingId);
     }
 }
 

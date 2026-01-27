@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Panel de Administración - Gundam TCG Argentina - Liga No Oficial</title>
     <link rel="stylesheet" href="../css/styles.css">
+    <link rel="stylesheet" href="../css/notifications.css">
+    <link rel="stylesheet" href="../css/loading.css">
 </head>
 <body>
     <div class="container">
@@ -21,6 +23,7 @@
         <nav class="tabs">
             <button class="tab-button active" data-tab="manage-leagues">Gestionar Ligas</button>
             <button class="tab-button" data-tab="import-results">Importar Resultados</button>
+            <button class="tab-button" data-tab="manage-rounds">Gestionar Fechas</button>
             <button class="tab-button" data-tab="manage-locations">Gestionar Ubicaciones</button>
         </nav>
 
@@ -142,6 +145,38 @@
             </div>
         </div>
 
+        <!-- Gestionar Fechas -->
+        <div id="manage-rounds" class="tab-content">
+            <h2>Gestionar Fechas</h2>
+
+            <div class="form-section">
+                <h3>Filtrar Fechas</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="filter-location">Ubicación:</label>
+                        <select id="filter-location">
+                            <option value="">Todas las ubicaciones</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="filter-date-from">Desde fecha:</label>
+                        <input type="date" id="filter-date-from">
+                    </div>
+                    <div class="form-group">
+                        <label for="filter-date-to">Hasta fecha:</label>
+                        <input type="date" id="filter-date-to">
+                    </div>
+                </div>
+                <button type="button" id="apply-filters-btn" class="btn btn-primary">Aplicar Filtros</button>
+                <button type="button" id="clear-filters-btn" class="btn btn-secondary">Limpiar Filtros</button>
+            </div>
+
+            <h3>Fechas Registradas</h3>
+            <div id="rounds-list">
+                <p class="placeholder">Selecciona al menos un filtro y haz clic en "Aplicar Filtros" para ver las fechas</p>
+            </div>
+        </div>
+
         <!-- Gestionar Ubicaciones -->
         <div id="manage-locations" class="tab-content">
             <h2>Gestionar Ubicaciones</h2>
@@ -166,6 +201,11 @@
             <div id="locations-list"></div>
         </div>
     </div>
+
+    <!-- Contenedores para notificaciones y loading -->
+    <div id="notification-container"></div>
+    <div id="notification-modal-container"></div>
+    <div id="loading-container"></div>
 
     <script type="module" src="../js/admin.js"></script>
 </body>

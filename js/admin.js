@@ -1,5 +1,7 @@
 import { firebaseConfig } from './firebase-config.js';
-import { sanitizeHTML, sanitizeURL, sanitizeAttribute, handleAsyncOperation, showError, showSuccess } from './utils.js';
+import { sanitizeHTML, sanitizeURL, sanitizeAttribute, handleAsyncOperation } from './utils.js';
+import { notifications } from './notifications.js';
+import { loading } from './loading.js';
 
 // Importar Firebase desde CDN
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
@@ -45,11 +47,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const isAdmin = await checkIfUserIsAdmin(user.email);
             if (!isAdmin) {
                 if (isDashboardPage) {
-                    alert('No tienes permisos para acceder al panel de administración.');
+                    notifications.error('No tienes permisos para acceder al panel de administración.');
                     await signOut(auth);
                     window.location.href = 'login.html';
                 } else if (isLoginPage) {
-                    alert('Tu cuenta de Google no tiene permisos de administrador.');
+                    notifications.error('Tu cuenta de Google no tiene permisos de administrador.');
                     await signOut(auth);
                     initLogin();
                 }
@@ -127,23 +129,25 @@ function setupTabs() {
     const tabContents = document.querySelectorAll('.tab-content');
 
     tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
             // Verificar si el formulario de edición de liga está visible
             const editLeagueDiv = document.getElementById('edit-league');
             if (editLeagueDiv && editLeagueDiv.style.display !== 'none') {
                 // Verificar si hay cambios sin guardar
                 if (hasUnsavedLeagueChanges()) {
                     const confirmMessage = '¿Hay cambios sin guardar. ¿Deseas guardarlos antes de continuar?';
-                    if (confirm(confirmMessage)) {
+                    const confirmed = await notifications.confirm(confirmMessage);
+                    if (confirmed) {
                         // Intentar guardar
-                        updateLeague().then(() => {
+                        try {
+                            await updateLeague();
                             // Después de guardar, volver a gestionar ligas y cambiar de tab
                             closeLeagueEditView();
                             changeTab(button, tabButtons, tabContents);
-                        }).catch(() => {
+                        } catch (error) {
                             // Si hay error al guardar, no cambiar de tab
                             return;
-                        });
+                        }
                         return;
                     } else {
                         // Descartar cambios
@@ -171,7 +175,10 @@ function changeTab(button, tabButtons, tabContents) {
 function closeLeagueEditView() {
     originalLeagueData = null; // Limpiar estado original
     document.getElementById('edit-league').style.display = 'none';
-    document.getElementById('manage-leagues').style.display = 'block';
+
+    // Usar clases CSS en lugar de style.display inline
+    document.getElementById('edit-league').classList.remove('active');
+    document.getElementById('manage-leagues').classList.add('active');
 }
 
 function setupLogout() {
@@ -181,7 +188,7 @@ function setupLogout() {
             window.location.href = 'login.html';
         } catch (error) {
             console.error('Error al cerrar sesión:', error);
-            alert('Error al cerrar sesión');
+            notifications.error('Error al cerrar sesión');
         }
     });
 
@@ -193,10 +200,10 @@ function setupLogout() {
             reloadBtn.textContent = '🔄 Recargando...';
             try {
                 await loadData();
-                alert('Datos recargados exitosamente');
+                notifications.success('Datos recargados exitosamente');
             } catch (error) {
                 console.error('Error al recargar datos:', error);
-                alert('Error al recargar datos');
+                notifications.error('Error al recargar datos');
             } finally {
                 reloadBtn.disabled = false;
                 reloadBtn.textContent = '🔄 Recargar';
@@ -206,6 +213,7 @@ function setupLogout() {
 }
 
 async function loadData() {
+    const loadingId = loading.show('Cargando datos...');
     try {
         // Cargar ubicaciones
         const locationsSnapshot = await getDocs(collection(db, 'locations'));
@@ -229,11 +237,14 @@ async function loadData() {
 
         populateLeagueSelectors();
         populateLocationSelectors();
+        populateFilterLocationSelector();
         renderLocationsList();
         renderLeaguesList();
     } catch (error) {
         console.error('Error al cargar datos:', error);
-        alert('Error al cargar los datos');
+        notifications.error('Error al cargar los datos');
+    } finally {
+        loading.hide(loadingId);
     }
 }
 
@@ -297,23 +308,60 @@ function setupForms() {
     // Botón volver de edición de liga
     const backToLeaguesBtn = document.getElementById('back-to-leagues-btn');
     if (backToLeaguesBtn) {
-        backToLeaguesBtn.addEventListener('click', () => {
+        backToLeaguesBtn.addEventListener('click', async () => {
             // Verificar si hay cambios sin guardar
             if (hasUnsavedLeagueChanges()) {
                 const confirmMessage = '¿Hay cambios sin guardar. ¿Deseas guardarlos antes de volver?';
-                if (confirm(confirmMessage)) {
+                const confirmed = await notifications.confirm(confirmMessage);
+                if (confirmed) {
                     // Intentar guardar
-                    updateLeague().catch(() => {
+                    try {
+                        await updateLeague();
+                    } catch (error) {
                         // Si hay error al guardar, no volver
-                    });
+                        return;
+                    }
                     return;
                 } else {
                     // Descartar cambios
                     originalLeagueData = null;
                 }
             }
+            // Usar clases CSS en lugar de style.display inline
             document.getElementById('edit-league').style.display = 'none';
-            document.getElementById('manage-leagues').style.display = 'block';
+            document.getElementById('edit-league').classList.remove('active');
+            document.getElementById('manage-leagues').classList.add('active');
+        });
+    }
+
+    // Setup filtros de fechas
+    const applyFiltersBtn = document.getElementById('apply-filters-btn');
+    if (applyFiltersBtn) {
+        applyFiltersBtn.addEventListener('click', () => {
+            const filters = getCurrentFilters();
+
+            // Validar que al menos un filtro esté seleccionado
+            if (!filters.locationId && !filters.dateFrom && !filters.dateTo) {
+                notifications.warning('Por favor selecciona al menos un filtro');
+                return;
+            }
+
+            renderAllRoundsList(filters);
+        });
+    }
+
+    const clearFiltersBtn = document.getElementById('clear-filters-btn');
+    if (clearFiltersBtn) {
+        clearFiltersBtn.addEventListener('click', () => {
+            document.getElementById('filter-location').value = '';
+            document.getElementById('filter-date-from').value = '';
+            document.getElementById('filter-date-to').value = '';
+
+            // Mostrar mensaje inicial
+            const listDiv = document.getElementById('rounds-list');
+            if (listDiv) {
+                listDiv.innerHTML = '<p class="placeholder">Selecciona al menos un filtro y haz clic en "Aplicar Filtros" para ver las fechas</p>';
+            }
         });
     }
 }
@@ -328,6 +376,23 @@ function populateLocationSelectors() {
             option.value = location.id;
             option.textContent = location.name;
             leagueLocationSelect.appendChild(option);
+        });
+    }
+}
+
+function populateFilterLocationSelector() {
+    const filterLocationSelect = document.getElementById('filter-location');
+    if (filterLocationSelect) {
+        filterLocationSelect.innerHTML = '<option value="">Todas las ubicaciones</option>';
+
+        // Ordenar ubicaciones alfabéticamente
+        const sortedLocations = [...locations].sort((a, b) => a.name.localeCompare(b.name));
+
+        sortedLocations.forEach(location => {
+            const option = document.createElement('option');
+            option.value = location.id;
+            option.textContent = location.name;
+            filterLocationSelect.appendChild(option);
         });
     }
 }
@@ -381,13 +446,13 @@ async function addLeague() {
     const status = statusSelect.value;
 
     if (!name || !locationId || !startDate || !status) {
-        alert('Por favor completa todos los campos');
+        notifications.warning('Por favor completa todos los campos');
         return;
     }
 
     const location = locations.find(l => l.id === locationId);
     if (!location) {
-        alert('Ubicación no encontrada');
+        notifications.error('Ubicación no encontrada');
         return;
     }
 
@@ -410,10 +475,10 @@ async function addLeague() {
 
         populateLeagueSelectors();
         renderLeaguesList();
-        alert('Liga creada exitosamente');
+        notifications.success('Liga creada exitosamente');
     } catch (error) {
         console.error('Error al crear liga:', error);
-        alert('Error al crear la liga');
+        notifications.error('Error al crear la liga');
     }
 }
 
@@ -426,10 +491,10 @@ async function changeLeagueStatus(leagueId, newStatus) {
         }
         populateLeagueSelectors();
         renderLeaguesList();
-        alert('Estado actualizado exitosamente');
+        notifications.success('Estado actualizado exitosamente');
     } catch (error) {
         console.error('Error al actualizar estado:', error);
-        alert('Error al actualizar el estado');
+        notifications.error('Error al actualizar el estado');
     }
 }
 
@@ -494,12 +559,12 @@ async function addLocation() {
     const url = urlInput.value.trim();
 
     if (!name) {
-        alert('Por favor ingresa un nombre');
+        notifications.warning('Por favor ingresa un nombre');
         return;
     }
 
     if (locations.some(l => l.name.toLowerCase() === name.toLowerCase())) {
-        alert('Esta ubicación ya existe');
+        notifications.warning('Esta ubicación ya existe');
         return;
     }
 
@@ -520,12 +585,12 @@ async function addLocation() {
 
         populateLocationSelectors();
         renderLocationsList();
-        alert('Ubicación agregada exitosamente');
+        notifications.success('Ubicación agregada exitosamente');
     } catch (error) {
         console.error('Error detallado al agregar ubicación:', error);
         console.error('Código de error:', error.code);
         console.error('Mensaje:', error.message);
-        alert('Error al agregar la ubicación: ' + error.message);
+        notifications.error('Error al agregar la ubicación: ' + error.message);
     }
 }
 
@@ -533,11 +598,12 @@ async function deleteLocation(locationId) {
     const hasRounds = rounds.some(r => r.locationId === locationId);
 
     if (hasRounds) {
-        alert('No puedes eliminar una ubicación que tiene fechas registradas');
+        notifications.warning('No puedes eliminar una ubicación que tiene fechas registradas');
         return;
     }
 
-    if (!confirm('¿Estás seguro de eliminar esta ubicación?')) {
+    const confirmed = await notifications.confirm('¿Estás seguro de eliminar esta ubicación?');
+    if (!confirmed) {
         return;
     }
 
@@ -546,10 +612,10 @@ async function deleteLocation(locationId) {
         locations = locations.filter(l => l.id !== locationId);
         populateLocationSelectors();
         renderLocationsList();
-        alert('Ubicación eliminada exitosamente');
+        notifications.success('Ubicación eliminada exitosamente');
     } catch (error) {
         console.error('Error al eliminar ubicación:', error);
-        alert('Error al eliminar la ubicación');
+        notifications.error('Error al eliminar la ubicación');
     }
 }
 
@@ -671,17 +737,17 @@ function previewImport() {
     const text = textarea.value;
 
     if (!selectedLeagueId) {
-        alert('Por favor selecciona una liga primero');
+        notifications.warning('Por favor selecciona una liga primero');
         return;
     }
 
     if (!roundDate) {
-        alert('Por favor selecciona la fecha del torneo');
+        notifications.warning('Por favor selecciona la fecha del torneo');
         return;
     }
 
     if (!text.trim()) {
-        alert('Por favor pega la tabla de resultados primero');
+        notifications.warning('Por favor pega la tabla de resultados primero');
         return;
     }
 
@@ -689,7 +755,7 @@ function previewImport() {
         parsedResults = parseTableText(text);
 
         if (parsedResults.length === 0) {
-            alert('No se pudieron parsear los resultados. Verifica el formato de la tabla.');
+            notifications.error('No se pudieron parsear los resultados. Verifica el formato de la tabla.');
             return;
         }
 
@@ -743,20 +809,20 @@ function previewImport() {
 
     } catch (error) {
         console.error('Error al parsear tabla:', error);
-        alert('Error al parsear la tabla: ' + error.message);
+        notifications.error('Error al parsear la tabla: ' + error.message);
     }
 }
 
 async function importResults() {
     if (parsedResults.length === 0) {
-        alert('No hay resultados para importar. Primero haz la vista previa.');
+        notifications.warning('No hay resultados para importar. Primero haz la vista previa.');
         return;
     }
 
     const roundDate = document.getElementById('round-date').value;
 
     if (!selectedLeagueId || !roundDate) {
-        alert('Falta información de liga o fecha');
+        notifications.error('Falta información de liga o fecha');
         return;
     }
 
@@ -769,10 +835,37 @@ async function importResults() {
     );
     const calculatedNumber = sortedRounds.findIndex(r => r.date === roundDate) + 1;
 
-    if (!confirm(`¿Confirmar importación de ${parsedResults.length} resultados para ${league.name}?\nFecha: ${formatDate(roundDate)}\nNúmero: Fecha ${calculatedNumber} (cronológico)`)) {
+    // Pedir puntos de participación
+    const participationPointsStr = await notifications.prompt(
+        '¿Puntos por participación?',
+        {
+            placeholder: 'Ej: 1, 2, 3...',
+            subtitle: 'Estos puntos se sumarán a todos los participantes de esta fecha',
+            inputType: 'number'
+        }
+    );
+
+    if (participationPointsStr === null) {
+        return; // Usuario canceló
+    }
+
+    const participationPoints = parseInt(participationPointsStr);
+
+    // Validar puntos de participación
+    if (participationPointsStr === '' || isNaN(participationPoints) || participationPoints < 0) {
+        notifications.error('Debes ingresar un valor válido para los puntos de participación (0 o mayor)');
         return;
     }
 
+    const confirmed = await notifications.confirm(
+        `¿Confirmar importación de ${parsedResults.length} resultados para ${league.name}?`,
+        { subtitle: `Fecha: ${formatDate(roundDate)} | Número: Fecha ${calculatedNumber} (cronológico) | Puntos participación: +${participationPoints}` }
+    );
+    if (!confirmed) {
+        return;
+    }
+
+    const loadingId = loading.show('Importando resultados...');
     try {
         const batch = writeBatch(db);
 
@@ -831,14 +924,14 @@ async function importResults() {
                 }
             }
 
-            // Guardar resultado
+            // Guardar resultado (sumando puntos de participación)
             const resultRef = doc(collection(db, 'round_results'));
             batch.set(resultRef, {
                 roundId,
                 playerId,
                 playerName: result.playerName,
                 ranking: result.ranking,
-                points: result.points,
+                points: result.points + participationPoints,
                 omw: result.omw,
                 oomw: result.oomw,
                 leagueId: selectedLeagueId,
@@ -849,7 +942,7 @@ async function importResults() {
 
         await batch.commit();
 
-        alert('Resultados importados exitosamente!');
+        notifications.success('Resultados importados exitosamente!');
 
         // Limpiar
         document.getElementById('results-textarea').value = '';
@@ -861,7 +954,9 @@ async function importResults() {
 
     } catch (error) {
         console.error('Error al importar resultados:', error);
-        alert('Error al importar resultados: ' + error.message);
+        notifications.error('Error al importar resultados: ' + error.message);
+    } finally {
+        loading.hide(loadingId);
     }
 }
 
@@ -870,8 +965,13 @@ async function importResults() {
 async function deleteRound(roundId) {
     const hasResults = roundResults.some(r => r.roundId === roundId);
 
+    let confirmed;
     if (hasResults) {
-        if (!confirm('Esta fecha tiene resultados registrados. ¿Estás seguro de eliminarla? Se eliminarán todos los resultados.')) {
+        confirmed = await notifications.confirm(
+            'Esta fecha tiene resultados registrados. ¿Estás seguro de eliminarla?',
+            { subtitle: 'Se eliminarán todos los resultados asociados' }
+        );
+        if (!confirmed) {
             return;
         }
 
@@ -881,7 +981,8 @@ async function deleteRound(roundId) {
         }
         roundResults = roundResults.filter(r => r.roundId !== roundId);
     } else {
-        if (!confirm('¿Estás seguro de eliminar esta fecha?')) {
+        confirmed = await notifications.confirm('¿Estás seguro de eliminar esta fecha?');
+        if (!confirmed) {
             return;
         }
     }
@@ -889,10 +990,10 @@ async function deleteRound(roundId) {
     try {
         await deleteDoc(doc(db, 'rounds', roundId));
         rounds = rounds.filter(r => r.id !== roundId);
-        alert('Fecha eliminada exitosamente');
+        notifications.success('Fecha eliminada exitosamente');
     } catch (error) {
         console.error('Error al eliminar fecha:', error);
-        alert('Error al eliminar la fecha');
+        notifications.error('Error al eliminar la fecha');
     }
 }
 
@@ -947,13 +1048,14 @@ async function deleteRound(roundId) {
 function editLeague(leagueId) {
     const league = leagues.find(l => l.id === leagueId);
     if (!league) {
-        alert('Liga no encontrada');
+        notifications.error('Liga no encontrada');
         return;
     }
 
-    // Ocultar vista principal de ligas
-    document.getElementById('manage-leagues').style.display = 'none';
+    // Ocultar vista principal de ligas y mostrar edición usando clases CSS
+    document.getElementById('manage-leagues').classList.remove('active');
     document.getElementById('edit-league').style.display = 'block';
+    document.getElementById('edit-league').classList.add('active');
 
     // Poblar selector de ubicaciones en formulario de edición
     const editLocationSelect = document.getElementById('edit-league-location');
@@ -1012,13 +1114,13 @@ async function updateLeague() {
     const status = document.getElementById('edit-league-status').value;
 
     if (!name || !locationId || !startDate || !status) {
-        alert('Por favor completa todos los campos');
+        notifications.warning('Por favor completa todos los campos');
         return;
     }
 
     const location = locations.find(l => l.id === locationId);
     if (!location) {
-        alert('Ubicación no encontrada');
+        notifications.error('Ubicación no encontrada');
         return;
     }
 
@@ -1045,14 +1147,15 @@ async function updateLeague() {
         // Limpiar estado original
         originalLeagueData = null;
 
-        // Volver a la vista principal
+        // Volver a la vista principal usando clases CSS
         document.getElementById('edit-league').style.display = 'none';
-        document.getElementById('manage-leagues').style.display = 'block';
+        document.getElementById('edit-league').classList.remove('active');
+        document.getElementById('manage-leagues').classList.add('active');
 
-        alert('Liga actualizada exitosamente');
+        notifications.success('Liga actualizada exitosamente');
     } catch (error) {
         console.error('Error al actualizar liga:', error);
-        alert('Error al actualizar la liga');
+        notifications.error('Error al actualizar la liga');
         throw error; // Propagar el error para que setupTabs lo maneje
     }
 }
@@ -1060,7 +1163,7 @@ async function updateLeague() {
 async function deleteLeague(leagueId) {
     const league = leagues.find(l => l.id === leagueId);
     if (!league) {
-        alert('Liga no encontrada');
+        notifications.error('Liga no encontrada');
         return;
     }
 
@@ -1068,11 +1171,17 @@ async function deleteLeague(leagueId) {
     const roundCount = leagueRounds.length;
 
     const confirmMessage = roundCount > 0
-        ? `¿Estás seguro de eliminar la liga "${league.name}"?\n\nEsto eliminará también ${roundCount} fecha(s) y todos sus resultados asociados.`
+        ? `¿Estás seguro de eliminar la liga "${league.name}"?`
         : `¿Estás seguro de eliminar la liga "${league.name}"?`;
 
-    if (!confirm(confirmMessage)) return;
+    const subtitle = roundCount > 0
+        ? `Esto eliminará también ${roundCount} fecha(s) y todos sus resultados asociados`
+        : null;
 
+    const confirmed = await notifications.confirm(confirmMessage, { subtitle });
+    if (!confirmed) return;
+
+    const loadingId = loading.show('Eliminando liga...');
     try {
         const batch = writeBatch(db);
 
@@ -1101,10 +1210,12 @@ async function deleteLeague(leagueId) {
         populateLeagueSelectors();
         renderLeaguesList();
 
-        alert('Liga eliminada exitosamente');
+        notifications.success('Liga eliminada exitosamente');
     } catch (error) {
         console.error('Error al eliminar liga:', error);
-        alert('Error al eliminar la liga');
+        notifications.error('Error al eliminar la liga');
+    } finally {
+        loading.hide(loadingId);
     }
 }
 
@@ -1147,16 +1258,19 @@ function renderLeagueRoundsList(leagueId) {
 async function editRoundDate(roundId) {
     const round = rounds.find(r => r.id === roundId);
     if (!round) {
-        alert('Fecha no encontrada');
+        notifications.error('Fecha no encontrada');
         return;
     }
 
-    const newDate = prompt('Nueva fecha (YYYY-MM-DD):', round.date);
+    const newDate = await notifications.prompt('Nueva fecha', {
+        defaultValue: round.date,
+        placeholder: 'YYYY-MM-DD'
+    });
     if (!newDate) return;
 
     // Validar formato de fecha
     if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
-        alert('Formato de fecha inválido. Use YYYY-MM-DD');
+        notifications.error('Formato de fecha inválido. Use YYYY-MM-DD');
         return;
     }
 
@@ -1172,16 +1286,117 @@ async function editRoundDate(roundId) {
             renderLeagueRoundsList(leagueId);
         }
 
-        alert('Fecha actualizada exitosamente');
+        notifications.success('Fecha actualizada exitosamente');
     } catch (error) {
         console.error('Error al actualizar fecha:', error);
-        alert('Error al actualizar la fecha');
+        notifications.error('Error al actualizar la fecha');
     }
 }
 
 async function deleteRoundFromLeague(roundId, leagueId) {
     await deleteRound(roundId);
     renderLeagueRoundsList(leagueId);
+}
+
+function renderAllRoundsList(filters = {}) {
+    const listDiv = document.getElementById('rounds-list');
+    if (!listDiv) return;
+
+    let filteredRounds = [...rounds];
+
+    // Aplicar filtro de ubicación
+    if (filters.locationId) {
+        filteredRounds = filteredRounds.filter(r => r.locationId === filters.locationId);
+    }
+
+    // Aplicar filtro de rango de fechas
+    if (filters.dateFrom) {
+        filteredRounds = filteredRounds.filter(r => r.date >= filters.dateFrom);
+    }
+    if (filters.dateTo) {
+        filteredRounds = filteredRounds.filter(r => r.date <= filters.dateTo);
+    }
+
+    // Ordenar por fecha descendente (más reciente primero)
+    filteredRounds.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    if (filteredRounds.length === 0) {
+        listDiv.innerHTML = '<p class="placeholder">No hay fechas que coincidan con los filtros seleccionados</p>';
+        return;
+    }
+
+    let html = '';
+    filteredRounds.forEach(round => {
+        const league = leagues.find(l => l.id === round.leagueId);
+        const results = roundResults.filter(r => r.roundId === round.id);
+        const roundNumber = getRoundNumberInLeague(round.id);
+
+        // Determinar icono y texto de estado
+        let statusIcon = '';
+        let statusText = '';
+        if (league) {
+            switch (league.status) {
+                case 'en_curso':
+                    statusIcon = '🟢';
+                    statusText = 'En Curso';
+                    break;
+                case 'finalizada':
+                    statusIcon = '🔴';
+                    statusText = 'Finalizada';
+                    break;
+                case 'pausada':
+                    statusIcon = '⏸️';
+                    statusText = 'Pausada';
+                    break;
+                case 'programada':
+                    statusIcon = '🟡';
+                    statusText = 'Programada';
+                    break;
+            }
+        }
+
+        html += `
+            <div class="list-item">
+                <div>
+                    <strong>Fecha ${roundNumber} - ${sanitizeHTML(league ? league.name : 'Liga desconocida')}</strong>
+                    <br>
+                    <span class="info-text">📅 ${formatDate(round.date)} | 📍 ${sanitizeHTML(round.locationName)}</span>
+                    <br>
+                    <span class="info-text">${statusIcon} ${statusText} | ${results.length} resultado(s)</span>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-secondary btn-small" onclick="window.editRoundDateFromManage('${sanitizeAttribute(round.id)}')">✏️ Editar Fecha</button>
+                    <button class="btn btn-danger btn-small" onclick="window.deleteRoundFromManage('${sanitizeAttribute(round.id)}')">🗑️ Eliminar</button>
+                </div>
+            </div>
+        `;
+    });
+
+    listDiv.innerHTML = html;
+}
+
+async function editRoundDateFromManage(roundId) {
+    await editRoundDate(roundId);
+
+    // Refrescar la lista de gestionar fechas
+    const filters = getCurrentFilters();
+    renderAllRoundsList(filters);
+}
+
+async function deleteRoundFromManage(roundId) {
+    await deleteRound(roundId);
+
+    // Refrescar la lista de gestionar fechas
+    const filters = getCurrentFilters();
+    renderAllRoundsList(filters);
+}
+
+function getCurrentFilters() {
+    return {
+        locationId: document.getElementById('filter-location')?.value || '',
+        dateFrom: document.getElementById('filter-date-from')?.value || '',
+        dateTo: document.getElementById('filter-date-to')?.value || ''
+    };
 }
 
 // ========== HELPERS ==========
@@ -1196,6 +1411,16 @@ function formatDate(dateString) {
     });
 }
 
+function getRoundNumberInLeague(roundId) {
+    const round = rounds.find(r => r.id === roundId);
+    if (!round) return null;
+
+    const leagueRounds = rounds.filter(r => r.leagueId === round.leagueId);
+    const sortedRounds = leagueRounds.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    return sortedRounds.findIndex(r => r.id === roundId) + 1;
+}
+
 // Exponer funciones globalmente
 window.deleteLocation = deleteLocation;
 window.deleteRound = deleteRound;
@@ -1204,3 +1429,5 @@ window.editLeague = editLeague;
 window.deleteLeague = deleteLeague;
 window.editRoundDate = editRoundDate;
 window.deleteRoundFromLeague = deleteRoundFromLeague;
+window.editRoundDateFromManage = editRoundDateFromManage;
+window.deleteRoundFromManage = deleteRoundFromManage;

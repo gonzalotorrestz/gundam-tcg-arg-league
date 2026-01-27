@@ -2,6 +2,10 @@
 // UTILIDADES DE SEGURIDAD Y MANEJO DE ERRORES
 // =============================================================================
 
+// Importar sistemas de notificaciones y loading
+import { notifications } from './notifications.js';
+import { loading } from './loading.js';
+
 /**
  * Sanitiza strings HTML para prevenir ataques XSS
  * Convierte caracteres especiales en entidades HTML seguras
@@ -124,10 +128,9 @@ export async function handleAsyncOperation(operation, options = {}) {
     const originalButtonText = button?.textContent;
 
     try {
-        // Deshabilitar botón y mostrar estado de carga
+        // Mostrar loading en botón
         if (button) {
-            button.disabled = true;
-            button.textContent = loadingMsg;
+            loading.showButton(button, loadingMsg);
         }
 
         // Ejecutar operación
@@ -135,7 +138,7 @@ export async function handleAsyncOperation(operation, options = {}) {
 
         // Mostrar mensaje de éxito
         if (successMsg) {
-            alert(successMsg);
+            notifications.success(successMsg);
         }
 
         // Ejecutar callback de éxito
@@ -152,11 +155,11 @@ export async function handleAsyncOperation(operation, options = {}) {
         // Log técnico para debugging
         console.error(`[${uiError.code}]`, uiError.userMessage, uiError.message, error);
 
-        // Ejecutar callback de error o mostrar alert
+        // Ejecutar callback de error o mostrar notificación de error
         if (onError) {
             onError(uiError);
         } else {
-            alert(uiError.userMessage);
+            notifications.error(uiError.userMessage);
         }
 
         return null;
@@ -164,24 +167,9 @@ export async function handleAsyncOperation(operation, options = {}) {
     } finally {
         // Restaurar estado del botón
         if (button) {
-            button.disabled = false;
-            button.textContent = originalButtonText;
+            loading.hideButton(button);
         }
     }
-}
-
-/**
- * Muestra un mensaje de error al usuario
- */
-export function showError(message) {
-    alert('❌ ' + message);
-}
-
-/**
- * Muestra un mensaje de éxito al usuario
- */
-export function showSuccess(message) {
-    alert('✅ ' + message);
 }
 
 // =============================================================================
