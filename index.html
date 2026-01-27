@@ -5,12 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gundam TCG Argentina - Liga No Oficial - Tabla de Posiciones</title>
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/notifications.css">
+    <link rel="stylesheet" href="css/loading.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🎴 Gundam TCG Argentina - Liga No Oficial</h1>
-            <p class="subtitle">Torneos por Ubicación - Temporada 2025</p>
+            <div class="header-title">
+                <img src="logo_gundam_tcg_arg.png" alt="Logo Gundam TCG Argentina" class="header-logo">
+                <h1>Gundam TCG Argentina - Liga No Oficial</h1>
+            </div>
             <a href="admin/login.html" class="admin-link">Administración</a>
         </header>
 
@@ -83,6 +87,10 @@
             <p>Gundam TCG Argentina - Liga No Oficial © 2025</p>
         </footer>
     </div>
+
+    <!-- Contenedores para notificaciones y loading -->
+    <div id="notification-container"></div>
+    <div id="loading-container"></div>
 
     <script type="module" src="js/public.js"></script>
 </body>

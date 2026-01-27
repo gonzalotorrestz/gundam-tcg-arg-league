@@ -1,0 +1,206 @@
+/* Sistema de Loading States */
+
+/* Contenedor de loading */
+#loading-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10001;
+    pointer-events: none;
+}
+
+/* Overlay de loading */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s ease-out;
+    pointer-events: all;
+}
+
+.loading-overlay.show {
+    opacity: 1;
+}
+
+.loading-overlay.hiding {
+    opacity: 0;
+    transition: opacity 0.2s ease-in;
+}
+
+/* Contenido del loading */
+.loading-content {
+    background: var(--card-bg);
+    padding: 30px 40px;
+    border-radius: 12px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    min-width: 200px;
+}
+
+/* Spinner animado */
+.loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid var(--border-color);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+/* Mensaje de loading */
+.loading-message {
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 500;
+    text-align: center;
+}
+
+/* Animación de spinner */
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Estado de loading para botones */
+.btn-loading {
+    position: relative;
+    opacity: 0.7;
+    pointer-events: none;
+    cursor: not-allowed !important;
+}
+
+.btn-loading:disabled {
+    opacity: 0.7;
+}
+
+/* Mini spinner para botones (opcional - se puede activar añadiendo un pseudo-elemento) */
+.btn-loading::after {
+    content: '';
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 14px;
+    height: 14px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+/* Ajuste de padding cuando hay spinner en botón */
+.btn-loading {
+    padding-right: 35px;
+}
+
+/* Responsive para móviles */
+@media (max-width: 768px) {
+    .loading-content {
+        padding: 25px 30px;
+        min-width: 160px;
+        max-width: calc(100% - 40px);
+    }
+
+    .loading-spinner {
+        width: 40px;
+        height: 40px;
+        border-width: 3px;
+    }
+
+    .loading-message {
+        font-size: 0.9rem;
+    }
+}
+
+/* Variante simple de loading inline (para usar en elementos específicos) */
+.loading-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+}
+
+.loading-inline::before {
+    content: '';
+    width: 16px;
+    height: 16px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+/* Loading para texto (skeleton placeholder) */
+.loading-skeleton {
+    background: linear-gradient(
+        90deg,
+        var(--border-color) 0%,
+        #f0f0f0 50%,
+        var(--border-color) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
+    border-radius: 4px;
+    min-height: 1em;
+}
+
+@keyframes skeleton-loading {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* Clases de utilidad para estados de loading */
+.is-loading {
+    position: relative;
+    pointer-events: none;
+}
+
+.is-loading::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+}
+
+.is-loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 30px;
+    height: 30px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    z-index: 2;
+}
