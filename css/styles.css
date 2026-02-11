@@ -441,7 +441,18 @@ textarea {
 
 .player-stats-card h3 {
     color: var(--primary-color);
-    margin-bottom: 20px;
+    margin-bottom: 5px;
+}
+
+.player-aliases {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-style: italic;
+    margin-bottom: 15px;
+}
+
+.player-stats-card h3 + h4 {
+    margin-top: 15px;
 }
 
 .stats-grid {

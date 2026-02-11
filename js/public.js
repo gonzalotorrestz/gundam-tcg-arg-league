@@ -180,6 +180,28 @@ async function loadData() {
     }
 }
 
+// Obtener nombre más reciente y aliases de un jugador a partir de sus resultados
+function getPlayerNames(playerResults) {
+    let latestDate = null;
+    let latestName = playerResults[0]?.playerName || '';
+    const namesSet = new Set();
+
+    playerResults.forEach(result => {
+        namesSet.add(result.playerName);
+        const round = rounds.find(r => r.id === result.roundId);
+        if (round && round.date) {
+            const roundDate = new Date(round.date);
+            if (!latestDate || roundDate > latestDate) {
+                latestDate = roundDate;
+                latestName = result.playerName;
+            }
+        }
+    });
+
+    const aliases = [...namesSet].filter(n => n !== latestName);
+    return { name: latestName, aliases, allNames: [...namesSet] };
+}
+
 // Calcular estadísticas acumuladas de jugadores por liga (con caché)
 function calculatePlayerStats(leagueId) {
     // Verificar caché primero
@@ -189,19 +211,29 @@ function calculatePlayerStats(leagueId) {
         // Filtrar resultados por liga
         const leagueResults = roundResults.filter(r => r.leagueId === leagueId);
 
-        // Inicializar stats
+        // Agrupar resultados por jugador para obtener nombres
+        const resultsByPlayer = {};
         leagueResults.forEach(result => {
-            if (!stats[result.playerId]) {
-                stats[result.playerId] = {
-                    name: result.playerName,
-                    totalPoints: 0,
-                    roundsPlayed: 0,
-                    omwSum: 0,
-                    oomwSum: 0,
-                    avgOmw: 0,
-                    avgOomw: 0
-                };
+            if (!resultsByPlayer[result.playerId]) {
+                resultsByPlayer[result.playerId] = [];
             }
+            resultsByPlayer[result.playerId].push(result);
+        });
+
+        // Inicializar stats
+        Object.entries(resultsByPlayer).forEach(([playerId, results]) => {
+            const { name, aliases, allNames } = getPlayerNames(results);
+            stats[playerId] = {
+                name,
+                aliases,
+                allNames,
+                totalPoints: 0,
+                roundsPlayed: 0,
+                omwSum: 0,
+                oomwSum: 0,
+                avgOmw: 0,
+                avgOomw: 0
+            };
         });
 
         // Acumular datos
@@ -407,14 +439,18 @@ function renderLeagueResults(leagueId) {
 // Renderizar jugadores de la liga
 function renderLeaguePlayers(leagueId) {
     const leagueResults = roundResults.filter(r => r.leagueId === leagueId);
-    const allStats = {};
+    const resultsByPlayer = {};
 
     leagueResults.forEach(result => {
-        if (!allStats[result.playerId]) {
-            allStats[result.playerId] = {
-                name: result.playerName
-            };
+        if (!resultsByPlayer[result.playerId]) {
+            resultsByPlayer[result.playerId] = [];
         }
+        resultsByPlayer[result.playerId].push(result);
+    });
+
+    const allStats = {};
+    Object.entries(resultsByPlayer).forEach(([playerId, results]) => {
+        allStats[playerId] = getPlayerNames(results);
     });
 
     const playersWithStats = Object.entries(allStats)
@@ -435,8 +471,9 @@ function renderLeaguePlayers(leagueId) {
     `;
 
     playersWithStats.forEach(([playerId, playerInfo]) => {
+        const allNamesLower = playerInfo.allNames.map(n => n.toLowerCase()).join('|');
         html += `
-            <button class="player-button" data-player-name="${sanitizeAttribute(playerInfo.name.toLowerCase())}" onclick="window.showPlayerStatsInLeague('${sanitizeAttribute(playerId)}', '${sanitizeAttribute(leagueId)}')">
+            <button class="player-button" data-player-names="${sanitizeAttribute(allNamesLower)}" onclick="window.showPlayerStatsInLeague('${sanitizeAttribute(playerId)}', '${sanitizeAttribute(leagueId)}')">
                 ${sanitizeHTML(playerInfo.name)}
             </button>
         `;
@@ -454,12 +491,9 @@ function renderLeaguePlayers(leagueId) {
                 const playerButtons = document.querySelectorAll('#league-players-grid .player-button');
 
                 playerButtons.forEach(button => {
-                    const playerName = button.getAttribute('data-player-name');
-                    if (playerName.includes(searchTerm)) {
-                        button.style.display = 'block';
-                    } else {
-                        button.style.display = 'none';
-                    }
+                    const playerNames = button.getAttribute('data-player-names');
+                    const matches = playerNames.split('|').some(name => name.includes(searchTerm));
+                    button.style.display = matches ? 'block' : 'none';
                 });
             });
         }
@@ -472,7 +506,7 @@ function showPlayerStatsInLeague(playerId, leagueId) {
 
     if (playerResults.length === 0) return;
 
-    const playerName = playerResults[0].playerName;
+    const { name: playerName, aliases } = getPlayerNames(playerResults);
     const league = leagues.find(l => l.id === leagueId);
 
     const totalPoints = playerResults.reduce((sum, r) => sum + r.points, 0);
@@ -480,9 +514,14 @@ function showPlayerStatsInLeague(playerId, leagueId) {
     const avgOmw = playerResults.reduce((sum, r) => sum + r.omw, 0) / roundsPlayed;
     const avgOomw = playerResults.reduce((sum, r) => sum + r.oomw, 0) / roundsPlayed;
 
+    const aliasesHtml = aliases.length > 0
+        ? `<p class="player-aliases">También conocido como: ${aliases.map(a => sanitizeHTML(a)).join(', ')}</p>`
+        : '';
+
     let html = `
         <div class="player-stats-card">
             <h3>${sanitizeHTML(playerName)}</h3>
+            ${aliasesHtml}
             <h4>${sanitizeHTML(league.name)} - ${sanitizeHTML(league.locationName)}</h4>
             <div class="stats-grid">
                 <div class="stat-item">
@@ -554,15 +593,22 @@ function populateGlobalPlayerSearch() {
     const playersDiv = document.getElementById('player-stats');
 
     // Obtener todos los jugadores con stats globales
-    const allStats = {};
+    const resultsByPlayer = {};
     roundResults.forEach(result => {
-        if (!allStats[result.playerId]) {
-            allStats[result.playerId] = {
-                name: result.playerName,
-                leagues: new Set()
-            };
+        if (!resultsByPlayer[result.playerId]) {
+            resultsByPlayer[result.playerId] = [];
         }
-        allStats[result.playerId].leagues.add(result.leagueId);
+        resultsByPlayer[result.playerId].push(result);
+    });
+
+    const allStats = {};
+    Object.entries(resultsByPlayer).forEach(([playerId, results]) => {
+        const { name, aliases, allNames } = getPlayerNames(results);
+        allStats[playerId] = {
+            name,
+            allNames,
+            leagues: new Set(results.map(r => r.leagueId))
+        };
     });
 
     const playersWithStats = Object.entries(allStats)
@@ -583,9 +629,9 @@ function populateGlobalPlayerSearch() {
                 return;
             }
 
-            // Filtrar jugadores por nombre
+            // Filtrar jugadores por cualquiera de sus nombres
             const filteredPlayers = playersWithStats.filter(([playerId, playerInfo]) =>
-                playerInfo.name.toLowerCase().includes(searchTerm)
+                playerInfo.allNames.some(name => name.toLowerCase().includes(searchTerm))
             );
 
             if (filteredPlayers.length === 0) {
@@ -614,7 +660,7 @@ function showGlobalPlayerStats(playerId) {
 
     if (playerResults.length === 0) return;
 
-    const playerName = playerResults[0].playerName;
+    const { name: playerName, aliases } = getPlayerNames(playerResults);
 
     // Calcular estadísticas globales
     const totalPoints = playerResults.reduce((sum, r) => sum + r.points, 0);
@@ -633,9 +679,14 @@ function showGlobalPlayerStats(playerId) {
         }
     });
 
+    const aliasesHtml = aliases.length > 0
+        ? `<p class="player-aliases">También conocido como: ${aliases.map(a => sanitizeHTML(a)).join(', ')}</p>`
+        : '';
+
     let html = `
         <div class="player-stats-card">
             <h3>${sanitizeHTML(playerName)}</h3>
+            ${aliasesHtml}
             <h4>Estadísticas Globales</h4>
             <div class="stats-grid">
                 <div class="stat-item">
