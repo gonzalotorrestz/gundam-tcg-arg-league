@@ -847,3 +847,55 @@ footer {
         grid-template-columns: 1fr;
     }
 }
+
+/* ===== GRÁFICO DE EVOLUCIÓN DE POSICIONES ===== */
+.position-chart-section {
+    margin-top: 30px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+}
+
+.position-chart-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding: 14px 18px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.position-chart-title::marker,
+.position-chart-title::-webkit-details-marker {
+    display: none;
+}
+
+.position-chart-title::before {
+    content: '▶';
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    transition: transform 0.2s ease;
+}
+
+.position-chart-section[open] .position-chart-title::before {
+    transform: rotate(90deg);
+}
+
+.position-chart-title:hover {
+    background: var(--bg-color);
+    border-radius: 8px;
+}
+
+.position-chart-section[open] .position-chart-title:hover {
+    border-radius: 8px 8px 0 0;
+}
+
+.position-chart-body {
+    padding: 0 18px 18px;
+    border-top: 1px solid var(--border-color);
+}

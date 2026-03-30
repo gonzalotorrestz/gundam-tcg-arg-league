@@ -18,6 +18,9 @@ let players = [];
 let rounds = [];
 let roundResults = [];
 
+// Instancia activa del gráfico de posiciones
+let positionChart = null;
+
 // Caché para estadísticas (mejora de performance)
 const statsCache = new DataCache();
 
@@ -257,6 +260,180 @@ function calculatePlayerStats(leagueId) {
     });
 }
 
+// ===== GRÁFICO DE EVOLUCIÓN DE POSICIONES =====
+
+/**
+ * Calcula la posición acumulada de cada jugador después de cada fecha.
+ * @param {string} leagueId
+ * @returns {{ positionsByPlayer: Object, rounds: Array }|null} null si hay menos de 2 fechas
+ */
+function calculatePositionEvolution(leagueId) {
+    const leagueRounds = rounds
+        .filter(r => r.leagueId === leagueId)
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    if (leagueRounds.length < 2) return null;
+
+    const leagueResults = roundResults.filter(r => r.leagueId === leagueId);
+    const playerIds = [...new Set(leagueResults.map(r => r.playerId))];
+
+    const positionsByPlayer = {};
+    playerIds.forEach(pid => (positionsByPlayer[pid] = []));
+
+    leagueRounds.forEach((round, roundIndex) => {
+        const roundIds = leagueRounds.slice(0, roundIndex + 1).map(r => r.id);
+        const cumulativeResults = leagueResults.filter(r => roundIds.includes(r.roundId));
+
+        const playerStats = {};
+        cumulativeResults.forEach(result => {
+            if (!playerStats[result.playerId]) {
+                playerStats[result.playerId] = { totalPoints: 0, omwSum: 0, oomwSum: 0, count: 0 };
+            }
+            playerStats[result.playerId].totalPoints += result.points;
+            playerStats[result.playerId].omwSum += result.omw;
+            playerStats[result.playerId].oomwSum += result.oomw;
+            playerStats[result.playerId].count++;
+        });
+
+        const sorted = Object.entries(playerStats)
+            .map(([id, s]) => ({
+                id,
+                totalPoints: s.totalPoints,
+                avgOmw: s.omwSum / s.count,
+                avgOomw: s.oomwSum / s.count
+            }))
+            .sort((a, b) => {
+                if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
+                if (b.avgOmw !== a.avgOmw) return b.avgOmw - a.avgOmw;
+                return b.avgOomw - a.avgOomw;
+            });
+
+        sorted.forEach((player, idx) => {
+            positionsByPlayer[player.id].push(idx + 1);
+        });
+
+        // Jugadores sin resultados acumulados hasta esta fecha reciben null
+        playerIds.forEach(pid => {
+            if (!playerStats[pid]) {
+                positionsByPlayer[pid].push(null);
+            }
+        });
+    });
+
+    return { positionsByPlayer, rounds: leagueRounds };
+}
+
+/**
+ * Renderiza el gráfico de líneas con la evolución de posiciones por fecha.
+ * @param {string} leagueId
+ */
+function hexToRgba(hex, alpha) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function renderPositionChart(leagueId) {
+    const data = calculatePositionEvolution(leagueId);
+    if (!data) return;
+
+    const { positionsByPlayer, rounds: sortedRounds } = data;
+    const stats = calculatePlayerStats(leagueId);
+
+    const labels = sortedRounds.map((r, i) => `Fecha ${i + 1}`);
+
+    const palette = [
+        '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed',
+        '#0891b2', '#be123c', '#15803d', '#b45309', '#6d28d9',
+        '#0e7490', '#9f1239'
+    ];
+
+    // Ordenar jugadores por posición final para que la leyenda coincida con el ranking
+    const finalStandings = Object.entries(stats)
+        .map(([playerId, s]) => ({ playerId, ...s }))
+        .sort((a, b) => {
+            if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
+            if (b.avgOmw !== a.avgOmw) return b.avgOmw - a.avgOmw;
+            return b.avgOomw - a.avgOomw;
+        });
+
+    const datasets = finalStandings.map((player, idx) => ({
+        label: player.name,
+        data: positionsByPlayer[player.playerId],
+        borderColor: palette[idx % palette.length],
+        backgroundColor: palette[idx % palette.length],
+        tension: 0.3,
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        spanGaps: false
+    }));
+
+    if (positionChart) {
+        positionChart.destroy();
+        positionChart = null;
+    }
+
+    const canvas = document.getElementById('position-evolution-chart');
+    if (!canvas) return;
+
+    let isolatedIndex = -1;
+
+    positionChart = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    onClick: (e, legendItem, legend) => {
+                        const clickedIndex = legendItem.datasetIndex;
+                        const chart = legend.chart;
+
+                        if (isolatedIndex === clickedIndex) {
+                            // Restaurar todos los datasets
+                            chart.data.datasets.forEach((ds, i) => {
+                                ds.borderColor = palette[i % palette.length];
+                                ds.backgroundColor = palette[i % palette.length];
+                                ds.borderWidth = 2;
+                            });
+                            isolatedIndex = -1;
+                        } else {
+                            // Resaltar el seleccionado, atenuar el resto
+                            chart.data.datasets.forEach((ds, i) => {
+                                if (i === clickedIndex) {
+                                    ds.borderColor = palette[i % palette.length];
+                                    ds.backgroundColor = palette[i % palette.length];
+                                    ds.borderWidth = 3;
+                                } else {
+                                    ds.borderColor = hexToRgba(palette[i % palette.length], 0.12);
+                                    ds.backgroundColor = hexToRgba(palette[i % palette.length], 0.12);
+                                    ds.borderWidth = 1;
+                                }
+                            });
+                            isolatedIndex = clickedIndex;
+                        }
+
+                        chart.update();
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    reverse: true,
+                    min: 1,
+                    ticks: {
+                        stepSize: 1,
+                        callback: value => `#${value}`
+                    },
+                    title: { display: true, text: 'Posición' }
+                }
+            }
+        }
+    });
+}
+
 // Renderizar ligas por estado
 function renderLeaguesByStatus() {
     const inProgressList = document.getElementById('in-progress-list');
@@ -372,6 +549,8 @@ function renderLeagueStandings(leagueId) {
     const totalPlayers = standingsArray.length;
     const totalRounds = leagueRounds.length;
 
+    const showChart = leagueRounds.length >= 2 && standingsArray.length > 0;
+
     document.getElementById('league-standings-content').innerHTML = `
         <div class="stats-summary">
             <div class="stat-card">
@@ -406,7 +585,26 @@ function renderLeagueStandings(leagueId) {
                 `).join('') : '<tr><td colspan="5" class="placeholder">No hay datos</td></tr>'}
             </tbody>
         </table>
+
+        ${showChart ? `
+        <details class="position-chart-section">
+            <summary class="position-chart-title">Evolución de Posiciones</summary>
+            <div class="position-chart-body">
+                <canvas id="position-evolution-chart"></canvas>
+            </div>
+        </details>` : ''}
     `;
+
+    if (showChart) {
+        const details = document.querySelector('.position-chart-section');
+        let chartInitialized = false;
+        details.addEventListener('toggle', () => {
+            if (details.open && !chartInitialized) {
+                chartInitialized = true;
+                renderPositionChart(leagueId);
+            }
+        });
+    }
 }
 
 // Renderizar resultados por fecha de la liga
