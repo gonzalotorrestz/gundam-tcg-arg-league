@@ -386,7 +386,7 @@ function renderPositionChart(leagueId) {
             responsive: true,
             plugins: {
                 legend: {
-                    position: 'right',
+                    position: 'bottom',
                     onClick: (e, legendItem, legend) => {
                         const clickedIndex = legendItem.datasetIndex;
                         const chart = legend.chart;
